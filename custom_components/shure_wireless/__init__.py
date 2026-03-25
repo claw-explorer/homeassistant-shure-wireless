@@ -17,8 +17,6 @@ from .shure_client import ShureClient
 
 _LOGGER = logging.getLogger(__name__)
 
-type ShureConfigEntry = ConfigEntry[ShureRuntimeData]
-
 
 @dataclass
 class ShureRuntimeData:
@@ -26,6 +24,9 @@ class ShureRuntimeData:
 
     client: ShureClient
     coordinator: ShureCoordinator
+
+
+ShureConfigEntry = ConfigEntry[ShureRuntimeData]
 
 
 class ShureCoordinator(DataUpdateCoordinator[None]):
