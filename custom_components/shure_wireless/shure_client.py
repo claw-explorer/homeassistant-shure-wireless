@@ -217,7 +217,8 @@ class ShureClient:
     def _process_sample(self, parts: list[str]) -> None:
         """Process a SAMPLE (metering) response.
 
-        SLX-D format: SAMPLE <ch> ALL <audio_peak> <audio_rms> <rf_level>
+        SLX-D format: SAMPLE <ch> ALL <rf_a> <rf_b> <audio_peak> <audio_rms>
+        Indices after removing SAMPLE: [0]=ch [1]=ALL [2]=rf_a [3]=rf_b [4]=audio_peak [5]=audio_rms
         """
         if len(parts) < 6:
             return
@@ -232,9 +233,11 @@ class ShureClient:
             return
 
         try:
-            channel.audio_level_peak = int(parts[3]) - 120
-            channel.audio_level = int(parts[4]) - 120
-            channel.rf_level = int(parts[5]) - 120
+            rf_a = int(parts[2]) - 120
+            rf_b = int(parts[3]) - 120
+            channel.rf_level = max(rf_a, rf_b)
+            channel.audio_level_peak = int(parts[4]) - 120
+            channel.audio_level = int(parts[5]) - 120
         except (ValueError, IndexError):
             _LOGGER.debug("Failed to parse SAMPLE data: %s", parts)
             return
