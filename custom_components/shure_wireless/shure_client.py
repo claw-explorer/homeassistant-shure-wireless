@@ -112,8 +112,20 @@ class ShureClient:
         self._connected = True
         self._listen_task = asyncio.create_task(self._listen())
 
-        # Request all current state
-        await self.send_command("GET 0 ALL")
+        # Request receiver-level state
+        for prop in ("MODEL", "FW_VER", "DEVICE_ID", "RF_BAND", "ENCRYPTION"):
+            await self.send_command(f"GET {prop}")
+
+        # Request per-channel state (GET 0 ALL is not supported on SLXD4D+)
+        channel_props = (
+            "CHAN_NAME", "FREQUENCY", "AUDIO_GAIN", "AUDIO_MUTE",
+            "TX_TYPE", "TX_DEVICE_ID", "TX_BATT_MINS",
+            "BATT_TYPE", "ENCRYPTION",
+        )
+        for ch in range(1, self.num_channels + 1):
+            for prop in channel_props:
+                await self.send_command(f"GET {ch} {prop}")
+
         # Enable metering for sample data (RF/audio levels)
         await self.send_command(f"SET 0 METER_RATE {METER_RATE_MS}")
 

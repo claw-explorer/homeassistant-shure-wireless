@@ -370,8 +370,8 @@ class TestConnect:
             await client.connect()
             assert client.connected is True
             assert client._listen_task is not None
-            # Should have sent GET 0 ALL and SET 0 METER_RATE
-            assert writer.write.call_count == 2
+            # Should have sent receiver GETs + per-channel GETs + SET METER_RATE
+            assert writer.write.call_count > 2
 
             await client.disconnect()
             assert client.connected is False
