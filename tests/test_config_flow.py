@@ -2,23 +2,24 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
-from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.shure_wireless.const import DOMAIN
 
 from .conftest import MOCK_CONFIG, MOCK_DEVICE_ID, MOCK_HOST, MOCK_PORT
 
-MOCK_ZEROCONF_INFO = ZeroconfServiceInfo(
+MOCK_ZEROCONF_INFO = SimpleNamespace(
     ip_address=None,
     ip_addresses=[],
     hostname="SLXD4DE-001.local.",
     name="Shure SLXD4DE._shure-slxd._tcp.local.",
+    host=MOCK_HOST,
     port=MOCK_PORT,
     properties={},
     type="_shure-slxd._tcp.local.",
