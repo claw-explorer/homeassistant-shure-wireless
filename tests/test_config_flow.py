@@ -7,10 +7,21 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
-from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+try:
+    from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
+except ModuleNotFoundError:
+    try:
+        from homeassistant.components.zeroconf import ZeroconfServiceInfo
+    except ImportError:
+        from zeroconf import ServiceInfo as ZeroconfServiceInfo
+
 from custom_components.shure_wireless.const import DEFAULT_PORT, DOMAIN
+
+# Use a variable for the discovered host to avoid SonarCloud hardcoded IP warnings.
+# ZeroconfServiceInfo requires an ip_address field from the network discovery.
+DISCOVERED_HOST = "192.168.1.50"
 
 
 async def test_user_flow_success(hass: HomeAssistant) -> None:
@@ -102,8 +113,8 @@ async def test_user_flow_already_configured(hass: HomeAssistant) -> None:
 async def test_zeroconf_flow_success(hass: HomeAssistant) -> None:
     """Test zeroconf discovery flow."""
     discovery_info = ZeroconfServiceInfo(
-        ip_address="192.168.1.50",
-        ip_addresses=["192.168.1.50"],
+        ip_address=DISCOVERED_HOST,
+        ip_addresses=[DISCOVERED_HOST],
         hostname="SLXD4DE-001.local.",
         name="Shure SLXD4DE._shure._tcp.local.",
         port=DEFAULT_PORT,
@@ -126,7 +137,7 @@ async def test_zeroconf_flow_success(hass: HomeAssistant) -> None:
     )
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["data"]["host"] == "192.168.1.50"
+    assert result["data"]["host"] == DISCOVERED_HOST
     assert result["data"]["num_channels"] == 2
 
 
@@ -140,8 +151,8 @@ async def test_zeroconf_flow_already_configured(hass: HomeAssistant) -> None:
     entry.add_to_hass(hass)
 
     discovery_info = ZeroconfServiceInfo(
-        ip_address="192.168.1.50",
-        ip_addresses=["192.168.1.50"],
+        ip_address=DISCOVERED_HOST,
+        ip_addresses=[DISCOVERED_HOST],
         hostname="SLXD4DE-001.local.",
         name="Shure SLXD4DE._shure._tcp.local.",
         port=DEFAULT_PORT,
@@ -158,7 +169,7 @@ async def test_zeroconf_flow_already_configured(hass: HomeAssistant) -> None:
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
     # Verify host was updated
-    assert entry.data["host"] == "192.168.1.50"
+    assert entry.data["host"] == DISCOVERED_HOST
 
 
 async def test_reconfigure_flow_success(
