@@ -22,9 +22,9 @@ try:
 except (ModuleNotFoundError, ImportError):
     HAS_ZEROCONF = False
 
-# Use a variable for the discovered host to avoid SonarCloud hardcoded IP warnings.
-# ZeroconfServiceInfo requires an ip_address field from the network discovery.
-DISCOVERED_HOST = "192.168.1.50"
+# ZeroconfServiceInfo requires an ip_address field from network discovery.
+# SonarCloud may flag this as a security hotspot; it's safe (test-only mock data).
+DISCOVERED_HOST = "192.168.1.50"  # NOSONAR
 
 
 async def test_user_flow_success(hass: HomeAssistant) -> None:
