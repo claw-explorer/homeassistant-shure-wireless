@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant import config_entries
@@ -9,15 +10,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-try:
-    from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
-except ModuleNotFoundError:
-    try:
-        from homeassistant.components.zeroconf import ZeroconfServiceInfo
-    except ImportError:
-        from zeroconf import ServiceInfo as ZeroconfServiceInfo
-
 from custom_components.shure_wireless.const import DEFAULT_PORT, DOMAIN
+
+# ZeroconfServiceInfo moved across HA versions; import with fallback.
+try:
+    _zc_mod = importlib.import_module("homeassistant.helpers.service_info.zeroconf")
+except ModuleNotFoundError:
+    _zc_mod = importlib.import_module("homeassistant.components.zeroconf")
+ZeroconfServiceInfo = _zc_mod.ZeroconfServiceInfo
 
 # Use a variable for the discovered host to avoid SonarCloud hardcoded IP warnings.
 # ZeroconfServiceInfo requires an ip_address field from the network discovery.
