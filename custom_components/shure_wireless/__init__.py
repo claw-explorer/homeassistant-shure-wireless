@@ -66,9 +66,12 @@ class ShureCoordinator(DataUpdateCoordinator[None]):
             if not self._was_available:
                 _LOGGER.info("Shure receiver at %s is available again", self.client.host)
                 self._was_available = True
-            # Send a heartbeat query to keep the connection alive
+            # Send a heartbeat query and refresh battery state
             try:
                 await self.client.send_command("GET 1 METER_RATE")
+                for ch in self.client.channels:
+                    for prop in ("TX_BATT_BARS", "TX_BATT_MINS"):
+                        await self.client.send_command(f"GET {ch} {prop}")
             except Exception as err:
                 self._was_available = False
                 raise UpdateFailed(f"Error communicating with Shure receiver at {self.client.host}: {err}") from err

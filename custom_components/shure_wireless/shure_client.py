@@ -120,7 +120,7 @@ class ShureClient:
         channel_props = (
             "CHAN_NAME", "FREQUENCY", "AUDIO_GAIN", "AUDIO_MUTE",
             "TX_TYPE", "TX_DEVICE_ID", "TX_BATT_MINS",
-            "BATT_TYPE", "ENCRYPTION",
+            "TX_BATT_BARS", "BATT_TYPE", "ENCRYPTION",
         )
         for ch in range(1, self.num_channels + 1):
             for prop in channel_props:
@@ -296,7 +296,7 @@ class ShureClient:
             channel.tx_model = value
         elif key == "TX_DEVICE_ID":
             channel.tx_device_id = cleaned
-        elif key == "BATT_BARS":
+        elif key in ("BATT_BARS", "TX_BATT_BARS"):
             val = int(value)
             channel.battery_bars = None if val == 255 else val
         elif key == "BATT_CHARGE":
