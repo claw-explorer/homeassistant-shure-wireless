@@ -14,7 +14,6 @@ from .shure_client import ShureClient
 
 if TYPE_CHECKING:
 
-
 async def _test_connection(hass: HomeAssistant, host: str, port: int) -> str:
     """Test connection and return device ID. Raises on failure."""
     client = ShureClient(host, port)
