@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
@@ -12,7 +12,6 @@ from homeassistant.core import HomeAssistant
 from .const import DEFAULT_PORT, DOMAIN
 from .shure_client import ShureClient
 
-if TYPE_CHECKING:
 
 async def _test_connection(hass: HomeAssistant, host: str, port: int) -> str:
     """Test connection and return device ID. Raises on failure."""

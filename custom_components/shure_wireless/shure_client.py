@@ -20,6 +20,8 @@ class ChannelState:
 
     name: str = ""
     frequency: str = ""
+    group: str = ""
+    channel_num: str = ""
     audio_level: int = -120  # dBFS
     audio_level_peak: int = -120  # dBFS
     rf_level: int = -120  # dBm
@@ -32,12 +34,17 @@ class ChannelState:
     battery_cycle: int | None = None
     battery_temp_c: int | None = None
     tx_model: str = ""
+    tx_fw_ver: str = ""
     tx_device_id: str = ""
     tx_mute_status: str = ""
     audio_gain: int | None = None
     audio_mute: str = ""
     interference_status: str = ""
     encryption_status: str = ""
+    fd_mode: str = ""
+    tx_rf_power: str = ""
+    tx_offset: int | None = None  # dB
+    squelch: int | None = None  # dB
 
 
 @dataclass
@@ -113,21 +120,30 @@ class ShureClient:
         self._listen_task = asyncio.create_task(self._listen())
 
         # Request receiver-level state
-        for prop in ("MODEL", "FW_VER", "DEVICE_ID", "RF_BAND", "ENCRYPTION"):
+        for prop in ("MODEL", "FW_VER", "DEVICE_ID", "RF_BAND", "ENCRYPTION", "LOCK_STATUS"):
             await self.send_command(f"GET {prop}")
 
         # Request per-channel state (GET 0 ALL is not supported on SLXD4D+)
         channel_props = (
             "CHAN_NAME",
             "FREQUENCY",
+            "GROUP_CHAN",
             "AUDIO_GAIN",
             "AUDIO_MUTE",
             "TX_TYPE",
             "TX_DEVICE_ID",
+            "TX_FW_VER",
             "TX_BATT_MINS",
             "TX_BATT_BARS",
             "BATT_TYPE",
+            "BATT_CHARGE",
+            "BATT_HEALTH",
+            "BATT_CYCLE",
             "ENCRYPTION",
+            "FD_MODE",
+            "TX_RF_PWR",
+            "TX_OFFSET",
+            "SQUELCH",
         )
         for ch in range(1, self.num_channels + 1):
             for prop in channel_props:
@@ -295,6 +311,11 @@ class ShureClient:
         elif key == "FREQUENCY":
             raw = str(int(value))
             channel.frequency = raw[:3] + "." + raw[3:6]
+        elif key == "GROUP_CHAN":
+            parts = value.split(",")
+            if len(parts) == 2:
+                channel.group = parts[0]
+                channel.channel_num = parts[1]
         elif key == "AUDIO_GAIN":
             channel.audio_gain = int(value) - 18
         elif key == "AUDIO_MUTE":
@@ -303,6 +324,8 @@ class ShureClient:
             channel.tx_model = value
         elif key == "TX_DEVICE_ID":
             channel.tx_device_id = cleaned
+        elif key == "TX_FW_VER":
+            channel.tx_fw_ver = cleaned
         elif key in ("BATT_BARS", "TX_BATT_BARS"):
             val = int(value)
             channel.battery_bars = None if val == 255 else val
@@ -327,6 +350,16 @@ class ShureClient:
             channel.interference_status = "DETECTED" if value == "CRITICAL" else value
         elif key == "ENCRYPTION":
             channel.encryption_status = "OK" if value == "OFF" else value
+        elif key == "FD_MODE":
+            channel.fd_mode = cleaned
+        elif key == "TX_RF_PWR":
+            channel.tx_rf_power = cleaned
+        elif key == "TX_OFFSET":
+            with contextlib.suppress(ValueError):
+                channel.tx_offset = int(cleaned)
+        elif key == "SQUELCH":
+            with contextlib.suppress(ValueError):
+                channel.squelch = int(cleaned)
         elif key in ("MUTE_STATUS", "MUTE_MODE_STATUS"):
             if value == "ON":
                 channel.tx_mute_status = "OFF"

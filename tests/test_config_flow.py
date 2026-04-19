@@ -1,10 +1,9 @@
-"""Tests for the Shure Wireless config flow."""
+"""Tests for Shure Wireless config flow."""
 
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
@@ -12,65 +11,71 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.shure_wireless.const import DEFAULT_PORT, DOMAIN
 
-# ZeroconfServiceInfo may not be available on older HA versions / CI environments.
-try:
-    from homeassistant.helpers.service_info.zeroconf import (
-        ZeroconfServiceInfo,
+from .conftest import MOCK_CONFIG, MOCK_DEVICE_ID, MOCK_HOST, MOCK_PORT
+
+MOCK_DISCOVERY_INFO = {
+    "host": MOCK_HOST,
+    "cid": "SLXD4DE-001",
+    "model": "SLXD4DE",
+    "name": "Studio A",
+    "num_channels": 2,
+}
+
+
+def _mock_test_connection(device_id: str = MOCK_DEVICE_ID):
+    """Create a patch for _test_connection that returns a device ID."""
+    return patch(
+        "custom_components.shure_wireless.config_flow._test_connection",
+        new_callable=AsyncMock,
+        return_value=device_id,
     )
 
-    HAS_ZEROCONF = True
-except (ModuleNotFoundError, ImportError):
-    HAS_ZEROCONF = False
 
-# ZeroconfServiceInfo requires an ip_address field from network discovery.
-# SonarCloud may flag this as a security hotspot; it's safe (test-only mock data).
-DISCOVERED_HOST = "192.168.1.50"  # NOSONAR
+# ===== User flow tests =====
 
 
-async def test_user_flow_success(hass: HomeAssistant) -> None:
-    """Test the full user setup flow."""
+async def test_user_flow_shows_form(hass: HomeAssistant) -> None:
+    """Test that the user flow shows a form initially."""
     result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "user"
+    assert result["errors"] == {}
 
-    with patch(
-        "custom_components.shure_wireless.config_flow._test_connection",
-        new_callable=AsyncMock,
-        return_value="SLXD4-001",
-    ):
+
+async def test_user_flow_success(hass: HomeAssistant) -> None:
+    """Test successful manual config flow creates entry."""
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
+
+    with _mock_test_connection():
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
             user_input={
-                "host": "shure-test.local",
-                "port": DEFAULT_PORT,
-                "num_channels": 4,
+                "host": MOCK_HOST,
+                "port": MOCK_PORT,
+                "num_channels": 2,
             },
         )
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["title"] == "Shure Wireless (shure-test.local)"
-    assert result["data"] == {
-        "host": "shure-test.local",
-        "port": DEFAULT_PORT,
-        "num_channels": 4,
-    }
+    assert result["title"] == f"Shure Wireless ({MOCK_HOST})"
+    assert result["data"] == MOCK_CONFIG
 
 
 async def test_user_flow_cannot_connect(hass: HomeAssistant) -> None:
-    """Test user flow when connection fails."""
+    """Test user flow shows error on connection failure."""
     result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
 
     with patch(
         "custom_components.shure_wireless.config_flow._test_connection",
         new_callable=AsyncMock,
-        side_effect=ConnectionRefusedError("Connection refused"),
+        side_effect=ConnectionRefusedError("refused"),
     ):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
             user_input={
-                "host": "shure-test.local",
-                "port": DEFAULT_PORT,
-                "num_channels": 4,
+                "host": MOCK_HOST,
+                "port": MOCK_PORT,
+                "num_channels": 2,
             },
         )
 
@@ -78,28 +83,42 @@ async def test_user_flow_cannot_connect(hass: HomeAssistant) -> None:
     assert result["errors"] == {"base": "connection_refused"}
 
 
-async def test_user_flow_already_configured(hass: HomeAssistant) -> None:
-    """Test user flow when device is already configured."""
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={"host": "shure-test.local", "port": DEFAULT_PORT, "num_channels": 4},
-        unique_id="SLXD4-001",
-    )
-    entry.add_to_hass(hass)
-
+async def test_user_flow_timeout(hass: HomeAssistant) -> None:
+    """Test user flow shows error on timeout."""
     result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
 
     with patch(
         "custom_components.shure_wireless.config_flow._test_connection",
         new_callable=AsyncMock,
-        return_value="SLXD4-001",
+        side_effect=TimeoutError("Connection timed out"),
     ):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
             user_input={
-                "host": "shure-other.local",
-                "port": DEFAULT_PORT,
-                "num_channels": 4,
+                "host": MOCK_HOST,
+                "port": MOCK_PORT,
+                "num_channels": 2,
+            },
+        )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "cannot_connect"}
+
+
+async def test_user_flow_already_configured(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Test user flow aborts if device already configured."""
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
+
+    with _mock_test_connection():
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={
+                "host": MOCK_HOST,
+                "port": MOCK_PORT,
+                "num_channels": 2,
             },
         )
 
@@ -107,68 +126,63 @@ async def test_user_flow_already_configured(hass: HomeAssistant) -> None:
     assert result["reason"] == "already_configured"
 
 
-@pytest.mark.skipif(not HAS_ZEROCONF, reason="ZeroconfServiceInfo not available")
-async def test_zeroconf_flow_success(hass: HomeAssistant) -> None:
-    """Test zeroconf discovery flow."""
-    discovery_info = ZeroconfServiceInfo(
-        ip_address=DISCOVERED_HOST,
-        ip_addresses=[DISCOVERED_HOST],
-        hostname="SLXD4DE-001.local.",
-        name="Shure SLXD4DE._shure._tcp.local.",
-        port=DEFAULT_PORT,
-        type="_shure._tcp.local.",
-        properties={},
-    )
+# ===== Discovery tests =====
 
+
+async def test_discovery_flow_shows_confirm(hass: HomeAssistant) -> None:
+    """Test ACN discovery shows confirmation form."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN,
-        context={"source": config_entries.SOURCE_ZEROCONF},
-        data=discovery_info,
+        context={"source": "discovery"},
+        data=MOCK_DISCOVERY_INFO,
     )
 
     assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "zeroconf_confirm"
+    assert result["step_id"] == "discovery_confirm"
+
+
+async def test_discovery_flow_confirm_creates_entry(hass: HomeAssistant) -> None:
+    """Test confirming discovery creates an entry."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "discovery"},
+        data=MOCK_DISCOVERY_INFO,
+    )
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        user_input={"num_channels": 2},
+        user_input={},
     )
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["data"]["host"] == DISCOVERED_HOST
+    assert "Shure SLXD4DE" in result["title"]
     assert result["data"]["num_channels"] == 2
+    assert result["data"]["port"] == DEFAULT_PORT
 
 
-@pytest.mark.skipif(not HAS_ZEROCONF, reason="ZeroconfServiceInfo not available")
-async def test_zeroconf_flow_already_configured(hass: HomeAssistant) -> None:
-    """Test zeroconf flow when device is already configured."""
+async def test_discovery_flow_already_configured(
+    hass: HomeAssistant,
+) -> None:
+    """Test discovery aborts if device already configured."""
     entry = MockConfigEntry(
         domain=DOMAIN,
-        data={"host": "shure-test.local", "port": DEFAULT_PORT, "num_channels": 4},
+        title="Existing",
+        data=MOCK_CONFIG.copy(),
         unique_id="SLXD4DE-001",
     )
     entry.add_to_hass(hass)
 
-    discovery_info = ZeroconfServiceInfo(
-        ip_address=DISCOVERED_HOST,
-        ip_addresses=[DISCOVERED_HOST],
-        hostname="SLXD4DE-001.local.",
-        name="Shure SLXD4DE._shure._tcp.local.",
-        port=DEFAULT_PORT,
-        type="_shure._tcp.local.",
-        properties={},
-    )
-
     result = await hass.config_entries.flow.async_init(
         DOMAIN,
-        context={"source": config_entries.SOURCE_ZEROCONF},
-        data=discovery_info,
+        context={"source": "discovery"},
+        data=MOCK_DISCOVERY_INFO,
     )
 
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
-    # Verify host was updated
-    assert entry.data["host"] == DISCOVERED_HOST
+
+
+# ===== Reconfigure tests =====
 
 
 async def test_reconfigure_flow_success(
@@ -190,39 +204,43 @@ async def test_reconfigure_flow_success(
             result["flow_id"],
             user_input={
                 "host": new_host,
-                "port": DEFAULT_PORT,
-                "num_channels": 2,
+                "port": MOCK_PORT,
+                "num_channels": 4,
             },
         )
 
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reconfigure_successful"
     assert mock_config_entry.data["host"] == new_host
+    assert mock_config_entry.data["num_channels"] == 4
 
 
 async def test_reconfigure_flow_cannot_connect(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
 ) -> None:
-    """Test reconfigure flow when connection fails."""
+    """Test reconfigure shows error on connection failure."""
     result = await mock_config_entry.start_reconfigure_flow(hass)
 
     with patch(
         "custom_components.shure_wireless.config_flow._test_connection",
         new_callable=AsyncMock,
-        side_effect=ConnectionRefusedError("Connection refused"),
+        side_effect=OSError("cannot connect"),
     ):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
             user_input={
-                "host": "bad-host.local",
-                "port": DEFAULT_PORT,
+                "host": "badhost",
+                "port": MOCK_PORT,
                 "num_channels": 2,
             },
         )
 
     assert result["type"] is FlowResultType.FORM
-    assert result["errors"] == {"base": "connection_refused"}
+    assert result["errors"] == {"base": "cannot_connect"}
+
+
+# ===== _test_connection helper tests =====
 
 
 async def test_test_connection_function(hass: HomeAssistant) -> None:
@@ -239,7 +257,7 @@ async def test_test_connection_function(hass: HomeAssistant) -> None:
         "custom_components.shure_wireless.config_flow.ShureClient",
         return_value=mock_client,
     ):
-        device_id = await _test_connection(hass, "shure-test.local", DEFAULT_PORT)
+        device_id = await _test_connection(hass, MOCK_HOST, DEFAULT_PORT)
 
     assert device_id == "SLXD4-001"
     mock_client.connect.assert_awaited_once()
@@ -247,7 +265,7 @@ async def test_test_connection_function(hass: HomeAssistant) -> None:
 
 
 async def test_test_connection_no_device_id(hass: HomeAssistant) -> None:
-    """Test _test_connection when device has no ID falls back to host:port."""
+    """Test _test_connection falls back to host:port when device has no ID."""
     from custom_components.shure_wireless.config_flow import _test_connection
     from custom_components.shure_wireless.shure_client import ReceiverState
 
@@ -260,6 +278,6 @@ async def test_test_connection_no_device_id(hass: HomeAssistant) -> None:
         "custom_components.shure_wireless.config_flow.ShureClient",
         return_value=mock_client,
     ):
-        device_id = await _test_connection(hass, "shure-test.local", DEFAULT_PORT)
+        device_id = await _test_connection(hass, MOCK_HOST, DEFAULT_PORT)
 
-    assert device_id == f"shure-test.local:{DEFAULT_PORT}"
+    assert device_id == f"{MOCK_HOST}:{DEFAULT_PORT}"
